@@ -131,7 +131,7 @@ Seems promising. Time to start unpacking the data.
 
 ```{r}
 
-fire_data_path <- "../data/California_Wildland_Fire_Perimeters_(All)/California_Wildland_Fire_Perimeters_(All).shp"
+fire_data_path <- "../data/California_Wildland_Fire_Perimeters_-All/California_Wildland_Fire_Perimeters_All.shp"
 
 fire_data_perim <- st_read(fire_data_path) %>% 
   st_as_sf() %>% 
@@ -223,7 +223,12 @@ cali_counties_join <- cali_counties_join %>%
   left_join(county_pop, by = c("name_join" = "table with row headers in column A and column headers in rows 3 through 4 (leading dots indicate sub-parts)"))
 
 #great, that actually worked, now we can cut cali_counties down to size with select and filter.
-XXXXXXXXXX Continue from here XXXXXXXXXXX
+#XXXXXXXXXX Continue from here XXXXXXXXXX
+cali_counties_final <- cali_counties_join %>% 
+  st_as_sf() %>% 
+  dplyr::select(name, '...2', geometry) %>%  #I seriously have to specify this? Completely ridiculous
+  rename("county_population" = "...2") %>% 
+  rename("county_name" = "name")
 
 #create ggplot
 ggplot()+
