@@ -1,0 +1,251 @@
+---
+title: "California Fire Map"
+author: "[Jason Allen](https://jcallen1995.github.io/)"
+subtitle: "Years 20XX-20XX"
+output:
+  html_document:
+    code_folding: 'hide'
+    theme: journal
+
+---
+
+So, to start out I need to get some data. I'm thinking of taking; 
+ - California Counties data (X)
+  * US boundaries data package has it.
+ - average rainfall (X)
+  * got it from national weather sevice.
+ - county population(X)
+  * got it from census
+ - fire polygons or rasters (X)
+  * I found exactly what I wanted.
+ - city names (X)
+  * I ended up getting this from another source.
+ - city polygons (X)
+  * Got it from the city names source.
+ 
+and basically combining all of these into an interractive map that
+the user can zoom in using the leaflet package, flip through the 
+years and also see a graph showing the estimated number of people
+whose lives were affected by the fires. I could also add other fitting
+data if I find good sources, but realistically, I might struggle to
+even find the data that I have listed here.
+
+Tomorrow I'll get started tracking down the data. 
+
+```{r}
+library(tidyverse)
+library(raster)
+library(sf)
+library(rgdal)
+
+GDALinfo("../data/nws_precip_ytd_20220101_conus.tif")
+
+precipitation_conus_path <- "../data/nws_precip_ytd_20220101_conus.tif"
+
+precip_conus <- raster(precipitation_conus_path, band = 2)
+
+spplot(precip_conus)
+
+```
+
+Okay, so I've tentatively got my precipitation data, wait, let's check that.
+
+Here's the precipitation data source
+
+https://water.weather.gov/precip/download.php
+
+Source: https://www.noaa.gov/
+
+GeoTIFF
+
+The new QPE GeoTIFFs generated from the NCEP Stage IV data are multi-band GeoTIFF. The bands they contain are:
+
+    Band 1 - Observation - Last 24 hours of QPE spanning 12Z to 12Z in inches
+    Band 2 - PRISM normals - PRISM normals in inches (see "Normal Precipitation" section on the About page)
+    Band 3 - Departure from normal - The departure from normal in inches
+    Band 4 - Percent of normal - The percent of normal
+
+Now, this raster shows precip in inches of rainfall. I'm not going to be using
+this for a quantitative calculation, so simply having this much is enough for me.
+
+The next step will be downloading all of the yearly data rasters from 2016-2022,
+then, once I actually have all of them, I have to figure out how to isolate the
+California part of the data. Most likely, I will be projecting the state boundary
+onto the raster and then selecting the raster points within the polygon. Should
+be simple enough once I actually get around to it. I need to also find the rest
+of my data.
+
+The data protocol changed in 2017 for the precip data, so I might need to do something
+different for year 2016 precip data.
+
+Now to check on the r package data sources.
+
+```{r}
+library(USAboundaries)
+
+california_state_select <- us_boundaries(states = 'california')
+
+cali_counties_data <- us_boundaries(states = 'california', type = "county")
+
+plot(california_state_select)
+plot(cali_counties_data)
+```
+
+Okay, so I've got the cali state and county polys in this package. Next is to check
+on the uscities.csv, and find out where its data comes from as well as the 
+us boundary data comes from.
+
+Actually, there is no data source imbeded in the csv that I can find so I'm gonna
+try some open source data.
+
+https://data.ca.gov/dataset/ca-geographic-boundaries
+
+Source: https://data.ca.gov/
+
+this is the one I'll try
+
+```{r}
+library(sf)
+
+ca_places_path <- "../data/ca-places-boundaries/CA_Places_TIGER2016.shp"
+
+ca_places_bound <- st_read(ca_places_path) %>% 
+  st_as_sf() %>% 
+  filter(NAME == "Santa Rosa")
+
+plot(ca_places_bound)
+```
+
+Okay, this looks promising. I'm just not 100% sure if it will give me city
+polygons or what it even is really. It actually looks like exactly what I wanted.
+
+
+Now onto fire data for california. I'll try this dataset first.
+
+https://hub-calfire-forestry.hub.arcgis.com/datasets/CALFIRE-Forestry::fire-perimeters/explore?location=37.417017%2C-122.003310%2C10.00
+
+Source: https://www.fire.ca.gov/
+
+
+Seems promising. Time to start unpacking the data.
+
+```{r}
+
+fire_data_path <- "../data/California_Wildland_Fire_Perimeters_(All)/California_Wildland_Fire_Perimeters_(All).shp"
+
+fire_data_perim <- st_read(fire_data_path) %>% 
+  st_as_sf() %>% 
+  filter(FIRE_NAME == "TUBBS")
+
+print(fire_data_perim)
+
+plot(fire_data_perim)
+
+```
+
+Okay, that was great. Now I need to get the populations of each county. I found
+a data source here. It's xslx format, but that should be fine.
+
+https://www.census.gov/data/datasets/time-series/demo/popest/2010s-counties-total.html
+
+Source: https://www.census.gov/en.html
+
+
+```{r}
+
+library(readxl)
+
+county_pop_path <- "../data/co-est2019-annres-06.xlsx"
+
+county_pop <- read_excel(county_pop_path)
+
+```
+
+
+Okay, looks good mostly. The csv doesn't have good column names, but that's fine.
+They're still labeled, just not conveniently so I can work with it. So, these
+numbers are the estimates from between 2010 and 2019 which is basically just a
+rough estimation which is close enough for me. These estimates are more than good
+enough for what I intend to use them for.
+
+
+OKAY. So I now have all my data. What is the next step? I should get started with
+making one of these data sets my 'base' and adding the data layers on from there.
+What is my core data layer? ...
+
+It's probably best to start with the US boundaries data set. It will give me the
+state and county polygons. I also need to figure out what data is getting joined
+to what. So, there are going to be a few separate layers. The base layer will be
+the leaflet map that I'm projecting the data onto. Just above the base layer 
+should be the precipitation layer so as to keep the polygon layer boundaries more
+clearly defined. The layer above that will be the county layer which will have 
+the county population data joined to it. Then, the next layer up will be the city
+polygon layer and the fire boundary layer on top. These two layers will help
+illustrate the proximity of the fires to major city centers.
+
+With the map breakdown like this, I can create the graph of population 'affected'
+by fires relatively easily.
+
+So in order to get everything ready for the map, I need to start cleaning up the
+data and joining what needs to be joined. To do this, I should make a ggplot that
+allows me to visualize the data layers from bottom to top and make sure I'm cutting
+out any data entries or columns that I don't need.
+
+
+Let's get started with the us boundaries ggplot
+
+```{r}
+
+#libraries are already called, but I might need to reimport the bounradies
+
+#get the california state boundary
+california_state <- us_boundaries(states = 'california')
+
+#get the california counties as an sfc
+cali_counties <- us_boundaries(states = 'california', type = "county")
+
+# I didn't need to recall the boundaries, but I'll just leave them here for now.
+
+#okay, now I want to join the population data to cali_counties.
+#we want a left join where pop gets added onto the states based on name.
+print(county_pop)
+print(cali_counties$name)
+#so, it appears that the names don't match. Trying to remove the .~~~ County, California
+#could be annoying, so I might just add that onto the cali_counties name and join by that
+#I can try mutating on a new column with altered nameing.
+cali_counties_join <- cali_counties %>% 
+  mutate(name_join = paste( ".", cali_counties$name, " County, California", sep = ""))
+
+print(cali_counties_join)
+
+#now try a left join, horrific column name
+cali_counties_join <- cali_counties_join %>% 
+  left_join(county_pop, by = c("name_join" = "table with row headers in column A and column headers in rows 3 through 4 (leading dots indicate sub-parts)"))
+
+#great, that actually worked, now we can cut cali_counties down to size with select and filter.
+XXXXXXXXXX Continue from here XXXXXXXXXXX
+
+#create ggplot
+ggplot()+
+  #color the cali counties and their borders
+  geom_sf(data = cali_counties, fill = "#454742", col = "#8d8c8b", size = .5)+
+  #create the theme for the background. I'm reusing an old theme
+  theme(panel.background = element_rect(fill = "#272727",
+                                        colour = "#272727",
+                                        size = .5,
+                                        linetype = "dashed"),
+        panel.grid.major = element_line(size = .5,
+                                        color = "#3d3d3d",
+                                        linetype = "solid"))+
+  #title and subtitle. I might need another legend position for credits.
+  theme(legend.position = "hide")+
+    labs(title = "TITLE",
+         subtitle = "SUBTITLE",
+         x = "",
+         y ="")
+
+
+```
+
+
+
