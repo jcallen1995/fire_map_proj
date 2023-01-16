@@ -42,9 +42,9 @@ GDALinfo("../data/nws_precip_ytd_20220101_conus.tif")
 
 precipitation_conus_path <- "../data/nws_precip_ytd_20220101_conus.tif"
 
-precip_conus <- raster(precipitation_conus_path, band = 2)
+precip_conus_test <- raster(precipitation_conus_path, band = 2)
 
-spplot(precip_conus)
+spplot(precip_conus_test)
 
 ```
 
@@ -133,13 +133,13 @@ Seems promising. Time to start unpacking the data.
 
 fire_data_path <- "../data/California_Wildland_Fire_Perimeters_-All/California_Wildland_Fire_Perimeters_All.shp"
 
-fire_data_perim <- st_read(fire_data_path) %>% 
+fire_data_perim_test <- st_read(fire_data_path) %>% 
   st_as_sf() %>% 
   filter(FIRE_NAME == "TUBBS")
 
-print(fire_data_perim)
+print(fire_data_perim_test)
 
-plot(fire_data_perim)
+plot(fire_data_perim_test)
 
 ```
 
@@ -187,7 +187,7 @@ illustrate the proximity of the fires to major city centers.
 - precipitation raster                
 - county poly with joined pop data    Tidy:[X]
 - city polygons                       Tidy:[X]
-- fire boundary poly                  
+- fire boundary poly                  Tidy:[X]
 
 - affected pop per year graph
 
@@ -303,6 +303,115 @@ Good, the next step should be to tidy up the fire map data and split it into
 different years. There's probably a built in way of dealing with that, perhaps 
 with groups or something, but I'm going to split the data for the readability of
 my code for now. I can pack things up nicer on the final map if I want to.
+
+
+```{r}
+#fire map time
+fire_data_path <- "../data/California_Wildland_Fire_Perimeters_-All/California_Wildland_Fire_Perimeters_All.shp"
+
+#fire data has date format for dates
+fire_data_perim <- st_read(fire_data_path) %>% 
+  st_as_sf() %>% 
+  #okay, so I' having issues with small polygons in the multipoly
+  #I'll try unioning them
+  dplyr::select(YEAR_, FIRE_NAME, geometry) %>% 
+  filter(YEAR_ > 2015)
+  
+
+#now select for fires in 2016
+fire_data_2016 <- fire_data_perim %>% 
+  filter(YEAR_ == 2016) %>% 
+  st_union() %>% #this eliminates the issue st_simplify was having with tiny polygons
+  st_simplify(dTolerance = 200)
+
+#the fire data is already in wgs 84, so no worries there
+
+#create ggplot
+ggplot()+
+  #color the objects
+  geom_sf(data = fire_data_2016, fill = "#454742", col = "#8d8c8b", size = .5)+
+  #create the theme for the background. I'm reusing an old theme
+  theme(panel.background = element_rect(fill = "#272727",
+                                        colour = "#272727",
+                                        size = .5,
+                                        linetype = "dashed"),
+        panel.grid.major = element_line(size = .5,
+                                        color = "#3d3d3d",
+                                        linetype = "solid"))+
+  #title and subtitle. I might need another legend position for credits.
+  theme(legend.position = "hide")+
+    labs(title = "TITLE",
+         subtitle = "SUBTITLE",
+         x = "",
+         y ="")
+
+```
+
+
+Now that the fire data is tidy and ready for the map, I'll tidy up the precip data
+
+
+```{r}
+#do I need raster libraries
+library(raster)
+library(rasterVis)
+library(ggplot2)
+
+#first get the us boundary CA state poly
+ca_state_poly <- us_boundaries(states = "California")
+
+
+#now get the precip data
+GDALinfo("../data/nws_precip_ytd_20220101_conus.tif")
+precipitation_conus_path <- "../data/nws_precip_ytd_20220101_conus.tif"
+
+#create the raster
+precip_conus <- raster(precipitation_conus_path, band = 2) %>% 
+  projectRaster(crs = 4326) %>% 
+  #crop california data
+  #crop(ca_state_poly) %>% 
+  #select only cali borders
+  raster::intersect(ca_state_poly) %>% 
+  #mask the state polygon
+  raster::mask(ca_state_poly) %>% 
+  #convert to pts
+  rasterToPoints(spatial = TRUE) %>% 
+  #then to df
+  data.frame()
+  
+
+#plot(precip_conus)
+
+
+ggplot()+
+  #color the objects
+  geom_sf(data = ca_state_poly, fill = "#454742", col = "#8d8c8b", size = .5)+
+  #create the theme for the background. I'm reusing an old theme
+  theme(panel.background = element_rect(fill = "#272727",
+                                        colour = "#272727",
+                                        size = .5,
+                                        linetype = "dashed"),
+        panel.grid.major = element_line(size = .5,
+                                        color = "#3d3d3d",
+                                        linetype = "solid"))+
+  #title and subtitle. I might need another legend position for credits.
+  geom_raster(data = precip_conus, aes(x=x, y=y, fill = nws_precip_ytd_20220101_conus))+
+  scale_fill_gradientn(colors = c("#fff8bf", "#6e6a4b",  "#141b57", "#000724"))+
+  theme(legend.position = "hide")+
+    labs(title = "TITLE",
+         subtitle = "SUBTITLE",
+         x = "",
+         y ="")
+
+```
+
+FINALLY!!!! I had to use the raster::mask fuction to do what I wanted cause
+raster::intersect only selected by the extent, either way, I have the tidy raster
+data I was looking for. The next step should be setting up the leaflet map. I
+think the best way to go about this will be to create the leaflet map I want in
+this RMD, but then create a new RMD that will be cleaner and just show the 
+leaflet map and have this rmd in a different folder showing my process.
+
 
 
 
