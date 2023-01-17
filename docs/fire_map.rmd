@@ -183,11 +183,11 @@ the county population data joined to it. Then, the next layer up will be the cit
 polygon layer and the fire boundary layer on top. These two layers will help
 illustrate the proximity of the fires to major city centers.
 
-- leaflet map                         
-- precipitation raster                
+- leaflet map                         Started
+- precipitation raster                Tidy:[only 2022 so far]
 - county poly with joined pop data    Tidy:[X]
 - city polygons                       Tidy:[X]
-- fire boundary poly                  Tidy:[X]
+- fire boundary poly                  Tidy:[only 2016 so far]
 
 - affected pop per year graph
 
@@ -276,7 +276,8 @@ ca_places_path <- "../data/ca-places-boundaries/CA_Places_TIGER2016.shp"
 ca_places_bound <- st_read(ca_places_path) %>% 
   st_as_sf(crs = 4326) %>% 
   dplyr::select(NAMELSAD, geometry) %>% 
-  st_simplify(dTolerance = 200) #freeport ends up with 'polygon empty' keep note in case it becomes a problem later
+  st_simplify(dTolerance = 200) %>%  #freeport ends up with 'polygon empty' keep note in case it becomes a problem later
+  st_transform(crs = "+proj=longlat +datum=WGS84") #needed for projecting on leaflet
 
 #create ggplot
 ggplot()+
@@ -304,6 +305,158 @@ different years. There's probably a built in way of dealing with that, perhaps
 with groups or something, but I'm going to split the data for the readability of
 my code for now. I can pack things up nicer on the final map if I want to.
 
+Okay, I seriously need to diagnose this terrible error. It's so bad, that even
+the built in st_is_valid() function is useless and breaks upon this mighty 
+error.
+
+```{r}
+#fire map error diagnosis
+fire_data_path <- "../data/California_Wildland_Fire_Perimeters_-All/California_Wildland_Fire_Perimeters_All.shp"
+
+#okay, so the error I need to diagnose is that some of the fire shapefile geometries
+#are broken and also completely break the sf::st_is_valid() diagnosis tool. I hate
+#this and it's driving me insane, so I need to figure out how to isolate the issue
+#without any actual tools. Let's start by recreating the error
+
+#corrupt_fire_data_1 <- st_read(fire_data_path) %>%  #okay, st_read seems to work just fine
+  #dplyr::select(YEAR_, FIRE_NAME, geometry) %>% #select also seems to work and shouldn't mess up anything
+  #st_is_valid() %>% 
+  #as.data.frame()
+  #so, if I do the valid check now, the problem is still the same, all NA
+  #what could I try next that might help isolate the issue? I can repeat the valid
+  #check for all years I want to see if it's just 2017
+  #filter(YEAR_ == 2016) %>% 
+  #st_is_valid() %>% 
+  #as.data.frame()
+
+  #okay, so 2016 is still fine and works, let's try 2017
+  #filter(YEAR_ == 2017) %>% 
+  #st_is_valid() %>% 
+  #as.data.frame()
+  #Once again, all NA
+
+  #now try 2018
+  #filter(YEAR_ == 2018) %>% 
+  #st_is_valid() %>% 
+  #as.data.frame()
+  #2018 is fine
+
+  #filter(YEAR_ == 2019) %>% 
+  #st_is_valid() %>% 
+  #as.data.frame()
+  #2019 works too
+
+  #filter(YEAR_ == 2020) %>% 
+  #st_is_valid() %>% 
+  #as.data.frame()
+  #2020 is fine
+
+  #filter(YEAR_ == 2021) %>% 
+  #st_is_valid() %>% 
+  #as.data.frame()
+  #2021 isn't broken either
+
+  #okay,so I have now established that the error is in 2017, now I'll create a new
+  #chunk to keep my notes intact.
+
+
+```
+So, new chunk is going to be for testing the different ways I can break down
+the data from 2017 to locate the erroneous polygon that is breaking st_is_valid()
+
+```{r}
+
+fire_data_path <- "../data/California_Wildland_Fire_Perimeters_-All/California_Wildland_Fire_Perimeters_All.shp"
+
+
+corrupt_fire_data_1 <- st_read(fire_data_path) %>%  #okay, st_read seems to work just fine
+  dplyr::select(YEAR_, ALARM_DATE, FIRE_NAME, geometry) %>% #select also seems to work and shouldn't mess up anything
+  filter(YEAR_ == 2017) %>%  #so the problem is in 2017, but I can try to break it down into months with ALARM_DATE
+  
+  #so now if this valid works, we know the error is in the first half of the year
+  #filter(ALARM_DATE > as.Date("2017-06-01")) %>% 
+  #st_is_valid() %>% 
+  #as.data.frame()
+  #okay, this is all NA again
+
+  #let's try the beginning of the year
+  #filter(ALARM_DATE < as.Date("2017-06-01")) %>% 
+  #st_is_valid() %>% 
+  #as.data.frame()
+  #THE BEGINNING IS FINE!!!
+
+  #okay, we'll try october
+  #filter(ALARM_DATE > as.Date("2017-10-01")) %>% 
+  #st_is_valid() %>% 
+  #as.data.frame()
+  #After is all working!, so now the error must be between june 1st and october 1st
+
+  #let's try september
+  #filter(ALARM_DATE > as.Date("2017-09-01")) %>% 
+  #st_is_valid() %>% 
+  #as.data.frame()
+  #september is fine
+
+  #august?
+  #filter(ALARM_DATE > as.Date("2017-08-01")) %>% 
+  #st_is_valid() %>% 
+  #as.data.frame()
+  #august is fine
+  
+  #july?
+  #filter(ALARM_DATE > as.Date("2017-07-01")) %>% 
+  #st_is_valid() %>% 
+  #as.data.frame()
+  #broken again, so that means that the error is between july 1st and august 1st
+
+  #just july
+  #filter(ALARM_DATE > as.Date("2017-07-01") & ALARM_DATE < as.Date("2017-08-01")) 
+  #still 148 fires
+
+  #first half of July
+  #filter(ALARM_DATE > as.Date("2017-07-01") & ALARM_DATE < as.Date("2017-07-15")) %>% 
+  #st_is_valid() %>% 
+  #as.data.frame()
+  #the first half is clear
+
+  #last 1/4 if July?
+  #filter(ALARM_DATE > as.Date("2017-07-23") & ALARM_DATE < as.Date("2017-08-01")) %>% 
+  #st_is_valid() %>% 
+  #as.data.frame()
+  #clear, so that means the error is between july 15th and july 23rd
+
+  #try this window
+  #filter(ALARM_DATE > as.Date("2017-07-14") & ALARM_DATE < as.Date("2017-07-24")) #%>% 
+  #st_is_valid() %>% 
+  #as.data.frame()
+  #error is in here, there are 31 observations, I will try manually checking
+    #NOTHING obvious
+
+  #filter(ALARM_DATE > as.Date("2017-07-16") & ALARM_DATE < as.Date("2017-07-19")) %>% 
+  #st_is_valid() %>% 
+  #as.data.frame()
+
+  #it's between 16 and 17
+  #filter(ALARM_DATE > as.Date("2017-07-15") & ALARM_DATE < as.Date("2017-07-18")) #%>% 
+  #st_is_valid() %>% 
+  #as.data.frame()
+  
+#there's one :2017 2017-07-17 MURPHY  has multiple 3 point polys
+  
+  #filter(FIRE_NAME == "MURPHY" & ALARM_DATE > as.Date("2017-07-15") & ALARM_DATE < as.Date("2017-07-18")) %>% 
+  #st_is_valid() %>% 
+  #as.data.frame()
+  #that's the one
+
+  #now, let's try filtering it out
+  filter(!(FIRE_NAME == "MURPHY" & ALARM_DATE > as.Date("2017-07-15") & ALARM_DATE < as.Date("2017-07-18"))) %>% 
+  st_is_valid() %>% 
+  as.data.frame()
+  #IT WORKS YEEEESSSSS, THIS TOOK AT LEAST 2 HOURS. I NEED A BREAK!
+  
+
+```
+
 
 ```{r}
 #fire map time
@@ -316,15 +469,86 @@ fire_data_perim <- st_read(fire_data_path) %>%
   #I'll try unioning them
   dplyr::select(YEAR_, FIRE_NAME, geometry) %>% 
   filter(YEAR_ > 2015)
+
+
+
+#why are all the polygons corrupt?
+fire_data_perim_corrupt_test <- st_read(fire_data_path) %>% 
+  st_as_sf() %>% 
+  #okay, so I' having issues with small polygons in the multipoly
+  #I'll try unioning them
+  dplyr::select(YEAR_, FIRE_NAME, geometry) %>% 
+  filter(YEAR_ > 2015) 
+
+fire_corrupt_buffer_test <- st_buffer(fire_data_perim_corrupt_test[!is.na(fire_data_perim_corrupt_test)], 0.0)
+
+
+fire_data_corrupt <- as.data.frame(st_is_valid(fire_data_perim_corrupt_test))
+
+fire_data_corrupt_2 <- as.data.frame(st_is_valid(st_set_crs(fire_data_perim_corrupt_test, 4326)))
+
+fire_data_corrupt_3 <- as.data.frame(st_is_valid(fire_data_perim_corrupt_test), sf_use_s2(FALSE))
+
   
 
 #now select for fires in 2016
 fire_data_2016 <- fire_data_perim %>% 
   filter(YEAR_ == 2016) %>% 
-  st_union() %>% #this eliminates the issue st_simplify was having with tiny polygons
-  st_simplify(dTolerance = 200)
+  #st_union() %>% #this eliminates the issue st_simplify was having with tiny polygons
+  st_make_valid() %>% #valid polygons were triggering the between 0 and 4 points error when they clearly had more than 3 points
+  #st_simplify(dTolerance = 200) %>% 
+  st_transform(crs = "+proj=longlat +datum=WGS84") #needed for projecting on leaflet
 
-#the fire data is already in wgs 84, so no worries there
+fire_2016_corrupt <- as_data_frame(st_is_valid(fire_data_2016))
+
+
+#now select for fires in 2017
+fire_data_2017 <- fire_data_perim %>% 
+  filter(YEAR_ == 2017) %>%
+  st_make_valid() %>% 
+  #st_union() %>% #this eliminates the issue st_simplify was having with tiny polygons
+  #st_simplify(dTolerance = 200) %>% 
+  st_transform(crs = "+proj=longlat +datum=WGS84") #needed for projecting on leaflet
+
+fire_2017_corrupt <- as_data_frame(st_is_valid(st_set_crs(fire_data_2017$geometry, 4326)))
+
+print(fire_data_2017)
+plot(fire_data_2017)
+
+#now select for fires in 2018
+fire_data_2018 <- fire_data_perim %>% 
+  filter(YEAR_ == 2018) %>% 
+  st_union() %>% #this eliminates the issue st_simplify was having with tiny polygons
+  st_simplify(dTolerance = 200) %>% 
+  st_transform(crs = "+proj=longlat +datum=WGS84") #needed for projecting on leaflet
+
+#now select for fires in 2019
+fire_data_2019 <- fire_data_perim %>% 
+  filter(YEAR_ == 2019) %>% 
+  st_union() %>% #this eliminates the issue st_simplify was having with tiny polygons
+  st_simplify(dTolerance = 200) %>% 
+  st_transform(crs = "+proj=longlat +datum=WGS84") #needed for projecting on leaflet
+
+#now select for fires in 2020
+fire_data_2020 <- fire_data_perim %>% 
+  filter(YEAR_ == 2020) %>% 
+  st_union() %>% #this eliminates the issue st_simplify was having with tiny polygons
+  st_simplify(dTolerance = 200) %>% 
+  st_transform(crs = "+proj=longlat +datum=WGS84") #needed for projecting on leaflet
+
+#now select for fires in 2021
+fire_data_2021 <- fire_data_perim %>% 
+  filter(YEAR_ == 2021) %>% 
+  st_union() %>% #this eliminates the issue st_simplify was having with tiny polygons
+  st_simplify(dTolerance = 200) %>% 
+  st_transform(crs = "+proj=longlat +datum=WGS84") #needed for projecting on leaflet
+
+#now select for fires in 2022
+fire_data_2022 <- fire_data_perim %>% 
+  filter(YEAR_ == 2022) %>% 
+  st_union() %>% #this eliminates the issue st_simplify was having with tiny polygons
+  st_simplify(dTolerance = 200) %>% 
+  st_transform(crs = "+proj=longlat +datum=WGS84") #needed for projecting on leaflet
 
 #create ggplot
 ggplot()+
@@ -380,6 +604,16 @@ precip_conus <- raster(precipitation_conus_path, band = 2) %>%
   data.frame()
   
 
+#create the raster for leaflet
+precip_conus_leaf <- raster(precipitation_conus_path, band = 2) %>% 
+  projectRaster(crs = 4326) %>% 
+  #crop california data
+  #crop(ca_state_poly) %>% 
+  #select only cali borders
+  raster::intersect(ca_state_poly) %>% 
+  #mask the state polygon
+  raster::mask(ca_state_poly)
+
 #plot(precip_conus)
 
 
@@ -412,10 +646,61 @@ think the best way to go about this will be to create the leaflet map I want in
 this RMD, but then create a new RMD that will be cleaner and just show the 
 leaflet map and have this rmd in a different folder showing my process.
 
+```{r}
+#time to try the leaflet map
+library(leaflet)
 
 
 
+map = leaflet() %>%
+  addTiles(group = "OSM") %>% #open street map baselayer
+  addProviderTiles(providers$CartoDB.Positron, group = "Carto Light") %>% #cartodb light basemap
+  addProviderTiles(providers$CartoDB.DarkMatter, group = "Carto Dark") %>%  #carto db dark basemap
+  addPolygons(data = cali_counties_final, 
+              fillOpacity = 0, 
+              weight = 1, 
+              color = "grey", 
+              group = "County Borders") %>% #county border polys
+  
 
+  addRasterImage(x = precip_conus_leaf, 
+                 opacity = .3, 
+                 colors = c("#fff8bf", "#6e6a4b",  "#141b57", "#000724"), 
+                 group = "Precipitation") %>% 
+  addPolygons(data = ca_places_bound, 
+              color = "grey", 
+              fillOpacity = .4, 
+              weight = 0, 
+              group = "Pop Centers") %>% 
+  addPolygons(data = fire_data_2016, 
+              opacity = .5, 
+              color = "red", 
+              group = "Fires in 2016") %>% 
+
+  #layer controls
+  addLayersControl(
+    baseGroups = c("OSM", "Carto Light", "Carto Dark"),
+    overlayGroups = c("County Borders", "Precipitation", "Fires in 2016"),
+    options = layersControlOptions(collapsed = FALSE)
+  ) %>% 
+  #create legend
+  addLegend(position = "bottomleft", 
+            colors = c("#fff8bf", "#6e6a4b",  "#141b57", "#000724"), 
+            labels = c("Low Rainfall", "", "", "High Rainfall"), 
+            group = "Legend")
+  
+
+map
+
+
+```
+
+Okay, great, this map is looking pretty mediocre, I can worry more about the
+aesthetics later, for now I have the most base layer finished. Now I have to
+figure out how to make an interactive switching map.
+
+Right, so now I'm just remembering that I only processed the precipitation raster
+for 2022, so now I need to go back up and finish processing all the year layers.
 
 
 
