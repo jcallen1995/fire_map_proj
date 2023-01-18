@@ -459,6 +459,8 @@ corrupt_fire_data_1 <- st_read(fire_data_path) %>%  #okay, st_read seems to work
 
 
 ```{r}
+library(rmapshaper)
+
 #fire map time
 fire_data_path <- "../data/California_Wildland_Fire_Perimeters_-All/California_Wildland_Fire_Perimeters_All.shp"
 
@@ -467,88 +469,72 @@ fire_data_perim <- st_read(fire_data_path) %>%
   st_as_sf() %>% 
   #okay, so I' having issues with small polygons in the multipoly
   #I'll try unioning them
-  dplyr::select(YEAR_, FIRE_NAME, geometry) %>% 
+  dplyr::select(YEAR_, ALARM_DATE, FIRE_NAME, geometry) %>% 
   filter(YEAR_ > 2015)
 
 
-
-#why are all the polygons corrupt?
-fire_data_perim_corrupt_test <- st_read(fire_data_path) %>% 
-  st_as_sf() %>% 
-  #okay, so I' having issues with small polygons in the multipoly
-  #I'll try unioning them
-  dplyr::select(YEAR_, FIRE_NAME, geometry) %>% 
-  filter(YEAR_ > 2015) 
-
-fire_corrupt_buffer_test <- st_buffer(fire_data_perim_corrupt_test[!is.na(fire_data_perim_corrupt_test)], 0.0)
-
-
-fire_data_corrupt <- as.data.frame(st_is_valid(fire_data_perim_corrupt_test))
-
-fire_data_corrupt_2 <- as.data.frame(st_is_valid(st_set_crs(fire_data_perim_corrupt_test, 4326)))
-
-fire_data_corrupt_3 <- as.data.frame(st_is_valid(fire_data_perim_corrupt_test), sf_use_s2(FALSE))
-
-  
 
 #now select for fires in 2016
 fire_data_2016 <- fire_data_perim %>% 
   filter(YEAR_ == 2016) %>% 
   #st_union() %>% #this eliminates the issue st_simplify was having with tiny polygons
   st_make_valid() %>% #valid polygons were triggering the between 0 and 4 points error when they clearly had more than 3 points
-  #st_simplify(dTolerance = 200) %>% 
+  rmapshaper::ms_simplify(keep = .1, keep_shapes = TRUE) %>% #ms_simplify does better to preserve topology and keeps 10% of the points
   st_transform(crs = "+proj=longlat +datum=WGS84") #needed for projecting on leaflet
-
-fire_2016_corrupt <- as_data_frame(st_is_valid(fire_data_2016))
 
 
 #now select for fires in 2017
 fire_data_2017 <- fire_data_perim %>% 
   filter(YEAR_ == 2017) %>%
+  filter(!(FIRE_NAME == "MURPHY" & ALARM_DATE > as.Date("2017-07-15") & ALARM_DATE < as.Date("2017-07-18"))) %>% 
   st_make_valid() %>% 
   #st_union() %>% #this eliminates the issue st_simplify was having with tiny polygons
-  #st_simplify(dTolerance = 200) %>% 
+  rmapshaper::ms_simplify(keep = .1, keep_shapes = TRUE) %>% 
   st_transform(crs = "+proj=longlat +datum=WGS84") #needed for projecting on leaflet
 
-fire_2017_corrupt <- as_data_frame(st_is_valid(st_set_crs(fire_data_2017$geometry, 4326)))
 
-print(fire_data_2017)
-plot(fire_data_2017)
 
 #now select for fires in 2018
 fire_data_2018 <- fire_data_perim %>% 
   filter(YEAR_ == 2018) %>% 
-  st_union() %>% #this eliminates the issue st_simplify was having with tiny polygons
-  st_simplify(dTolerance = 200) %>% 
+  st_make_valid() %>% 
+  rmapshaper::ms_simplify(keep = .1, keep_shapes = TRUE) %>% 
   st_transform(crs = "+proj=longlat +datum=WGS84") #needed for projecting on leaflet
 
 #now select for fires in 2019
 fire_data_2019 <- fire_data_perim %>% 
   filter(YEAR_ == 2019) %>% 
-  st_union() %>% #this eliminates the issue st_simplify was having with tiny polygons
-  st_simplify(dTolerance = 200) %>% 
+  #might need to remove 'BELLA COLLINA GOLF COURSE SCL' and 'ORTEGA'
+  filter(!(FIRE_NAME == 'ORTEGA' | FIRE_NAME == 'BELLA COLLINA GOLF COURSE SCL')) %>% 
+  #yes, st_make_valid messed them up for some reason
+  st_make_valid() %>% 
+  rmapshaper::ms_simplify(keep = .1, keep_shapes = TRUE) %>% 
   st_transform(crs = "+proj=longlat +datum=WGS84") #needed for projecting on leaflet
+
 
 #now select for fires in 2020
 fire_data_2020 <- fire_data_perim %>% 
   filter(YEAR_ == 2020) %>% 
-  st_union() %>% #this eliminates the issue st_simplify was having with tiny polygons
-  st_simplify(dTolerance = 200) %>% 
+  st_make_valid() %>% 
+  rmapshaper::ms_simplify(keep = .1, keep_shapes = TRUE) %>% 
   st_transform(crs = "+proj=longlat +datum=WGS84") #needed for projecting on leaflet
 
 #now select for fires in 2021
 fire_data_2021 <- fire_data_perim %>% 
   filter(YEAR_ == 2021) %>% 
-  st_union() %>% #this eliminates the issue st_simplify was having with tiny polygons
-  st_simplify(dTolerance = 200) %>% 
+  st_make_valid() %>% 
+  rmapshaper::ms_simplify(keep = .1, keep_shapes = TRUE) %>% 
   st_transform(crs = "+proj=longlat +datum=WGS84") #needed for projecting on leaflet
 
+#NO 2022 FIRE POLYGON DATA!!!!!
+
 #now select for fires in 2022
-fire_data_2022 <- fire_data_perim %>% 
-  filter(YEAR_ == 2022) %>% 
-  st_union() %>% #this eliminates the issue st_simplify was having with tiny polygons
-  st_simplify(dTolerance = 200) %>% 
-  st_transform(crs = "+proj=longlat +datum=WGS84") #needed for projecting on leaflet
+#fire_data_2022 <- fire_data_perim %>% 
+  #filter(YEAR_ == 2022) %>% 
+  #st_union() %>% #this eliminates the issue st_simplify was having with tiny polygons
+  #t_make_valid() %>% 
+  #st_simplify(dTolerance = 200) %>% 
+  #st_transform(crs = "+proj=longlat +datum=WGS84") #needed for projecting on leaflet
 
 #create ggplot
 ggplot()+
@@ -574,6 +560,13 @@ ggplot()+
 
 Now that the fire data is tidy and ready for the map, I'll tidy up the precip data
 
+ -  I'm back, having just finished getting the ms_simplify to work. I might need
+    to cast the as something else to make leaflet accept them cause the ms_simplify
+    left them as different data types, but it should be usable.
+    
+    Turns out, that I forgot to take out the union which was the reason for the
+    different types.
+
 
 ```{r}
 #do I need raster libraries
@@ -589,7 +582,28 @@ ca_state_poly <- us_boundaries(states = "California")
 GDALinfo("../data/nws_precip_ytd_20220101_conus.tif")
 precipitation_conus_path <- "../data/nws_precip_ytd_20220101_conus.tif"
 
-#create the raster
+#yearly precip paths
+#the date on the tif file is the 1st of the next year, when the data was presumably compiled
+#2016
+precip_2016_path <- "../data/raw_precip_data/nws_precip_ytd_20170101_geotiff_year_2016/nws_precip_ytd_20170101_conus.tif"
+
+#2017
+precip_2017_path <- "../data/raw_precip_data/nws_precip_ytd_20180101_geotiff_year_2017/nws_precip_ytd_20180101_conus.tif"
+
+#2018
+precip_2018_path <- "../data/raw_precip_data/nws_precip_ytd_20190101_geotiff_year_2018/nws_precip_ytd_20190101_conus.tif"
+
+#2019
+precip_2019_path <- "../data/raw_precip_data/nws_precip_ytd_20200101_geotiff_year_2019/nws_precip_ytd_20200101_conus.tif"
+
+#2020
+precip_2020_path <- "../data/raw_precip_data/nws_precip_ytd_20210101_geotiff_year_2020/nws_precip_ytd_20210101_conus.tif"
+
+#2021
+precip_2021_path <- "../data/raw_precip_data/nws_precip_ytd_20220101_geotiff_year_2021/nws_precip_ytd_20220101_conus.tif"
+
+
+#create the raster 2022 rainfall
 precip_conus <- raster(precipitation_conus_path, band = 2) %>% 
   projectRaster(crs = 4326) %>% 
   #crop california data
@@ -614,8 +628,36 @@ precip_conus_leaf <- raster(precipitation_conus_path, band = 2) %>%
   #mask the state polygon
   raster::mask(ca_state_poly)
 
-#plot(precip_conus)
+#rasters by year for the leaflet map 
+precip_2016 <- raster(precip_2016_path, band = 2) %>% #band 2 has the precip data in inches
+  projectRaster(crs = 4326) %>% #wgs 84 prjections
+  raster::intersect(ca_state_poly) %>% #select only cali state extent
+  raster::mask(ca_state_poly) #mask only the california data
 
+precip_2017 <- raster(precip_2017_path, band = 2) %>% #band 2 has the precip data in inches
+  projectRaster(crs = 4326) %>% #wgs 84 prjections
+  raster::intersect(ca_state_poly) %>% #select only cali state extent
+  raster::mask(ca_state_poly) #mask only the california data
+
+precip_2018 <- raster(precip_2018_path, band = 2) %>% #band 2 has the precip data in inches
+  projectRaster(crs = 4326) %>% #wgs 84 prjections
+  raster::intersect(ca_state_poly) %>% #select only cali state extent
+  raster::mask(ca_state_poly) #mask only the california data
+
+precip_2019 <- raster(precip_2019_path, band = 2) %>% #band 2 has the precip data in inches
+  projectRaster(crs = 4326) %>% #wgs 84 prjections
+  raster::intersect(ca_state_poly) %>% #select only cali state extent
+  raster::mask(ca_state_poly) #mask only the california data
+
+precip_2020 <- raster(precip_2020_path, band = 2) %>% #band 2 has the precip data in inches
+  projectRaster(crs = 4326) %>% #wgs 84 prjections
+  raster::intersect(ca_state_poly) %>% #select only cali state extent
+  raster::mask(ca_state_poly) #mask only the california data
+
+precip_2021 <- raster(precip_2021_path, band = 2) %>% #band 2 has the precip data in inches
+  projectRaster(crs = 4326) %>% #wgs 84 prjections
+  raster::intersect(ca_state_poly) %>% #select only cali state extent
+  raster::mask(ca_state_poly) #mask only the california data
 
 ggplot()+
   #color the objects
@@ -649,6 +691,18 @@ leaflet map and have this rmd in a different folder showing my process.
 ```{r}
 #time to try the leaflet map
 library(leaflet)
+library(leaflet.extras)
+library(leafpop)
+
+
+county_popup_text <- paste("<div class='leaflet-popup-scrolled' style='max-width:600px;max-height:300px'><b>",
+                           
+                           '  <h2 align="center"><strong>', cali_counties_final$county_name, "</strong></h2></a><br>",
+               "</b>",
+               
+               ' <b>County Population: </b> ',
+                           
+                            cali_counties_final$county_population,'<br><br><center><img src="')
 
 
 
@@ -660,34 +714,115 @@ map = leaflet() %>%
               fillOpacity = 0, 
               weight = 1, 
               color = "grey", 
-              group = "County Borders") %>% #county border polys
+              group = "County Borders",
+              popup = county_popup_text) %>% #county border polys
   
 
-  addRasterImage(x = precip_conus_leaf, 
-                 opacity = .3, 
-                 colors = c("#fff8bf", "#6e6a4b",  "#141b57", "#000724"), 
-                 group = "Precipitation") %>% 
+  
   addPolygons(data = ca_places_bound, 
               color = "grey", 
               fillOpacity = .4, 
               weight = 0, 
-              group = "Pop Centers") %>% 
+              group = "Pop Centers",
+              popup = ca_places_bound$NAMELSAD) %>% 
+  
+  #2016 fires
+  addRasterImage(x = precip_2016, 
+                 opacity = .5, 
+                 colors = c("#fff8bf", "#6e6a4b",  "#141b57", "#000724"), 
+                 group = "Fires in 2016") %>% 
   addPolygons(data = fire_data_2016, 
               opacity = .5, 
               color = "red", 
-              group = "Fires in 2016") %>% 
+              group = "Fires in 2016",
+              popup = fire_data_2016$FIRE_NAME) %>% 
+  
+  #2017 fires
+  addRasterImage(x = precip_2017, 
+                 opacity = .5, 
+                 colors = c("#fff8bf", "#6e6a4b",  "#141b57", "#000724"), 
+                 group = "Fires in 2017") %>% 
+  addPolygons(data = fire_data_2017, 
+              opacity = .5, 
+              color = "red", 
+              group = "Fires in 2017",
+              popup = fire_data_2017$FIRE_NAME) %>% 
+  
+  #2018 fires
+  addRasterImage(x = precip_2018, 
+                 opacity = .5, 
+                 colors = c("#fff8bf", "#6e6a4b",  "#141b57", "#000724"), 
+                 group = "Fires in 2018") %>% 
+  addPolygons(data = fire_data_2018, 
+              opacity = .5, 
+              color = "red", 
+              group = "Fires in 2018",
+              popup = fire_data_2018$FIRE_NAME) %>% 
+  
+  #2019 fires
+  addRasterImage(x = precip_2019, 
+                 opacity = .5, 
+                 colors = c("#fff8bf", "#6e6a4b",  "#141b57", "#000724"), 
+                 group = "Fires in 2019") %>% 
+  addPolygons(data = fire_data_2019, 
+              opacity = .5, 
+              color = "red", 
+              group = "Fires in 2019",
+              popup = fire_data_2019$FIRE_NAME) %>% 
+  
+  #2020 fires
+  addRasterImage(x = precip_2020, 
+                 opacity = .5, 
+                 colors = c("#fff8bf", "#6e6a4b",  "#141b57", "#000724"), 
+                 group = "Fires in 2020") %>% 
+  addPolygons(data = fire_data_2020, 
+              opacity = .5, 
+              color = "red", 
+              group = "Fires in 2020",
+              popup = fire_data_2020$FIRE_NAME) %>% 
+  
+  #2021 fires
+  addRasterImage(x = precip_2021, 
+                 opacity = .5, 
+                 colors = c("#fff8bf", "#6e6a4b",  "#141b57", "#000724"), 
+                 group = "Fires in 2021") %>% 
+  addPolygons(data = fire_data_2021, 
+              opacity = .5, 
+              color = "red", 
+              group = "Fires in 2021",
+              popup = fire_data_2021$FIRE_NAME) %>% 
 
   #layer controls
   addLayersControl(
     baseGroups = c("OSM", "Carto Light", "Carto Dark"),
-    overlayGroups = c("County Borders", "Precipitation", "Fires in 2016"),
+    overlayGroups = c("County Borders", 
+                      "Precipitation",
+                      "Pop Centers",
+                      "Fires in 2016",
+                      "Fires in 2017",
+                      "Fires in 2018",
+                      "Fires in 2019",
+                      "Fires in 2020",
+                      "Fires in 2021"),
     options = layersControlOptions(collapsed = FALSE)
   ) %>% 
   #create legend
   addLegend(position = "bottomleft", 
             colors = c("#fff8bf", "#6e6a4b",  "#141b57", "#000724"), 
             labels = c("Low Rainfall", "", "", "High Rainfall"), 
-            group = "Legend")
+            group = "Legend") %>% 
+  addSearchOSM() %>% 
+  addFullscreenControl() %>% 
+  hideGroup("Fires in 2016") %>% 
+  hideGroup("Fires in 2017") %>% 
+  hideGroup("Fires in 2018") %>% 
+  hideGroup("Fires in 2019") %>% 
+  hideGroup("Fires in 2020") #%>% 
+  
+  #implementation: https://rdrr.io/github/r-spatial/leafpop/man/addPopupGraphs.html
+  #I still need to make the actual data for the graph first
+  #addPopupGraphs()
+  
   
 
 map
@@ -701,6 +836,8 @@ figure out how to make an interactive switching map.
 
 Right, so now I'm just remembering that I only processed the precipitation raster
 for 2022, so now I need to go back up and finish processing all the year layers.
+
+Alrighty, so the map itself is done, now I just need to make the graphs.
 
 
 
