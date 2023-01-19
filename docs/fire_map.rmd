@@ -688,6 +688,108 @@ think the best way to go about this will be to create the leaflet map I want in
 this RMD, but then create a new RMD that will be cleaner and just show the 
 leaflet map and have this rmd in a different folder showing my process.
 
+
+I'm going to make a chunk to work on the graphs here
+
+so the graph I want is going to be a graph of the calculated yearly number of
+people who are 'affected' by fires by selecting counties with large fires in them
+or many small fires. I'm gonna need to start by just simply selecting fires based
+on size and figure out the smaller fires issue later.
+
+```{r}
+#select fires based on size
+
+#might need specific county
+cali_counties_sonoma <- cali_counties_final %>% 
+  filter(county_name == "Sonoma") %>% 
+  st_make_valid()
+
+#let's see what the raw fire data has that could help me
+fire_data_select_test <- fire_data_2017 %>% #okay, from here I'm going to try to add a column containing the county names the fire intersects
+  st_transform(crs = "+proj=longlat +datum=WGS84") %>%
+  st_make_valid() %>% #had to make the fire data clean because of the conversion from geos to s2 and duplicate points
+  st_intersection(cali_counties_sonoma)
+  
+
+ggplot()+
+  #color the cali counties and their borders
+  geom_sf(data = cali_counties_sonoma, fill = "#454742", col = "#8d8c8b", size = .5)+
+  #create the theme for the background. I'm reusing an old theme
+  theme(panel.background = element_rect(fill = "#272727",
+                                        colour = "#272727",
+                                        size = .5,
+                                        linetype = "dashed"),
+        panel.grid.major = element_line(size = .5,
+                                        color = "#3d3d3d",
+                                        linetype = "solid"))+
+  #title and subtitle. I might need another legend position for credits.
+  geom_sf(data = fire_data_select_test, fill= "red", col = "red")#check the fire data
+  theme(legend.position = "hide")+
+    labs(title = "TITLE",
+         subtitle = "SUBTITLE",
+         x = "",
+         y ="")
+
+```
+
+Okay, so that works with just a singular county, but does it work with all counties?
+
+```{r}
+#select fires based on size
+
+#might need specific county
+cali_counties_valid <- cali_counties_final %>% 
+  st_make_valid()
+
+#need to strip the geometry from counties for joining
+counties_mini_test <- cali_counties_valid %>% 
+  mutate(county_area = st_area(cali_counties_valid$geometry)) %>% 
+  as.data.frame() %>% 
+  dplyr::select(county_name, county_population, county_area)
+
+#let's see what the raw fire data has that could help me
+fire_data_select_test_full <- fire_data_2017 %>% #okay, from here I'm going to try to add a column containing the county names the fire intersects
+  st_transform(crs = "+proj=longlat +datum=WGS84") %>%
+  st_make_valid() %>% #had to make the fire data clean because of the conversion from geos to s2 and duplicate points
+  st_intersection(cali_counties_valid) %>% #okay, so this gave me what I wanted, it attached the county name and population count to the fires
+  group_by(county_name) %>% #group the fires by county name so I can operate on them
+  summarize(geometry = st_union(geometry)) %>% #summarize is being weird, but I can just add the county pop after
+  left_join(counties_mini_test, by = c('county_name' = 'county_name')) %>%  #okay, hopefully, geometry not being the last column isn't a problem
+  mutate(fire_area = st_area(geometry)) %>%  #add fire area
+  mutate(fire_coverage = (fire_area/county_area)*100) #percentage of county area covered by fires
+  
+#I think I'm going to judge that any county where over 1% of the county area was covered by fires contitutes the county being
+#'impacted by wildfires' for the purposes of this qualitiative analysis. I could also say that about 8% is 'seriously impacted'
+#since that's about the fire coverage for sonoma county in 2017.
+
+   
+  
+
+plot(fire_data_select_test_full)
+
+
+ggplot()+
+  #color the cali counties and their borders
+  geom_sf(data = cali_counties_valid, fill = "#454742", col = "#8d8c8b", size = .5)+
+  #create the theme for the background. I'm reusing an old theme
+  theme(panel.background = element_rect(fill = "#272727",
+                                        colour = "#272727",
+                                        size = .5,
+                                        linetype = "dashed"),
+        panel.grid.major = element_line(size = .5,
+                                        color = "#3d3d3d",
+                                        linetype = "solid"))+
+  #title and subtitle. I might need another legend position for credits.
+  geom_sf(data = fire_data_select_test_full, fill= "red", col = "red")#check the fire data
+  theme(legend.position = "hide")+
+    labs(title = "TITLE",
+         subtitle = "SUBTITLE",
+         x = "",
+         y ="")
+
+```
+
+
 ```{r}
 #time to try the leaflet map
 library(leaflet)
