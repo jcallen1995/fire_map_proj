@@ -756,11 +756,14 @@ fire_data_select_test_full <- fire_data_2017 %>% #okay, from here I'm going to t
   summarize(geometry = st_union(geometry)) %>% #summarize is being weird, but I can just add the county pop after
   left_join(counties_mini_test, by = c('county_name' = 'county_name')) %>%  #okay, hopefully, geometry not being the last column isn't a problem
   mutate(fire_area = st_area(geometry)) %>%  #add fire area
-  mutate(fire_coverage = (fire_area/county_area)*100) #percentage of county area covered by fires
+  mutate(fire_coverage = as.numeric(fire_area/county_area)*100) %>%  #percentage of county area covered by fires
+  mutate(fire_impacted = ifelse(fire_coverage > 1, "impacted", "not impacted"))
   
 #I think I'm going to judge that any county where over 1% of the county area was covered by fires contitutes the county being
 #'impacted by wildfires' for the purposes of this qualitiative analysis. I could also say that about 8% is 'seriously impacted'
 #since that's about the fire coverage for sonoma county in 2017.
+
+#okay, I've got a column of impacted fires, next step will be figuring out how I want to put it in the leaflet map.
 
    
   
@@ -768,7 +771,7 @@ fire_data_select_test_full <- fire_data_2017 %>% #okay, from here I'm going to t
 plot(fire_data_select_test_full)
 
 
-ggplot()+
+test_graph <- ggplot()+
   #color the cali counties and their borders
   geom_sf(data = cali_counties_valid, fill = "#454742", col = "#8d8c8b", size = .5)+
   #create the theme for the background. I'm reusing an old theme
@@ -919,7 +922,8 @@ map = leaflet() %>%
   hideGroup("Fires in 2017") %>% 
   hideGroup("Fires in 2018") %>% 
   hideGroup("Fires in 2019") %>% 
-  hideGroup("Fires in 2020") #%>% 
+  hideGroup("Fires in 2020") %>% 
+  addMiniMap()
   
   #implementation: https://rdrr.io/github/r-spatial/leafpop/man/addPopupGraphs.html
   #I still need to make the actual data for the graph first
